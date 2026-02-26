@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HomeInv Protocol | Decentralized REIT on zkSync</title>
+
+    <!-- Styles -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles/main.css">
+
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="antialiased">
+
+    <!-- Mount point -->
+    <div id="app"></div>
+
+    <script type="module">
+        // ── Components ──────────────────────────────────────────────
+        import { renderNavbar, initNavbarScroll } from './components/navbar.js';
+        import { renderHero }                     from './components/hero.js';
+        import { renderMission }                  from './components/mission.js';
+        import { renderStats, initCounters }      from './components/stats.js';
+        import { renderHowItWorks }               from './components/howItWorks.js';
+        import { renderTechnology }               from './components/technology.js';
+        import { renderImpact }                   from './components/impact.js';
+        import { renderCTA, renderFooter }        from './components/ctaFooter.js';
+
+        // ── Utilities ───────────────────────────────────────────────
+        import { initScene }      from './utils/scene.js';
+        import { initAnimations } from './utils/animations.js';
+
+        // ── Render ──────────────────────────────────────────────────
+        document.getElementById('app').innerHTML = [
+            renderNavbar(),
+            renderHero(),
+            renderMission(),
+            renderStats(),
+            renderHowItWorks(),
+            renderTechnology(),
+            renderImpact(),
+            renderCTA(),
+            renderFooter(),
+        ].join('');
+
+        // ── Bootstrap ───────────────────────────────────────────────
+        lucide.createIcons();
+        gsap.registerPlugin(ScrollTrigger);
+
+        initNavbarScroll();
+        initScene();
+        initAnimations(gsap, ScrollTrigger);
+        initCounters(gsap, ScrollTrigger);
+    </script>
+</body>
+</html>
