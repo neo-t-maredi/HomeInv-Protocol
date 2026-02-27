@@ -281,3 +281,7 @@ South Africa has one of the highest housing inequality rates in the world. HomeI
 
 ## Licence
 
+
+## Preview
+
+![HomeInv Protocol Landing Page](./screenshot.png)
