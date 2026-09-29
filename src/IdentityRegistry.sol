@@ -31,11 +31,7 @@ contract IdentityRegistry is Ownable {
 
     mapping(address => Identity) public identities;
 
-    event IdentityVerified(
-        address indexed wallet,
-        IdentityType identityType,
-        bytes2 jurisdiction
-    );
+    event IdentityVerified(address indexed wallet, IdentityType identityType, bytes2 jurisdiction);
     event IdentityRevoked(address indexed wallet);
     event IdentityExpired(address indexed wallet);
 
@@ -43,17 +39,12 @@ contract IdentityRegistry is Ownable {
         jurisdictionRegistry = JurisdictionRegistry(_jurisdictionRegistry);
     }
 
-    function verifyIdentity(
-        address _wallet,
-        IdentityType _identityType,
-        bytes2 _jurisdiction,
-        uint256 _expiresAt
-    ) external onlyOwner {
+    function verifyIdentity(address _wallet, IdentityType _identityType, bytes2 _jurisdiction, uint256 _expiresAt)
+        external
+        onlyOwner
+    {
         require(_wallet != address(0), "Invalid wallet address");
-        require(
-            jurisdictionRegistry.isJurisdictionActive(_jurisdiction),
-            "Jurisdiction not active"
-        );
+        require(jurisdictionRegistry.isJurisdictionActive(_jurisdiction), "Jurisdiction not active");
         require(_expiresAt > block.timestamp, "Expiry must be in the future");
 
         identities[_wallet] = Identity({
@@ -74,6 +65,7 @@ contract IdentityRegistry is Ownable {
 
         emit IdentityRevoked(_wallet);
     }
+
     // Core check — returns true only if wallet is verified AND not expired
     // Called by PropertyPool, RentVault and TokenFactory before any action
     function isVerified(address _wallet) external view returns (bool) {
@@ -82,7 +74,7 @@ contract IdentityRegistry is Ownable {
     }
 
     function getIdentity(address _wallet) external view returns (Identity memory) {
-    require(identities[_wallet].isVerified, "Identity not verified");
-    return identities[_wallet];
-}
+        require(identities[_wallet].isVerified, "Identity not verified");
+        return identities[_wallet];
+    }
 }

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 /**
  * @title PropertyPool
- * @notice One deployed per property via REITFactory. Manages the full
+ * @notice A funding pool linked to a submission in REITFactory. Manages the full
  * lifecycle of a development — from investor funding through to tenant
  * ownership. State machine enforces correct order of operations.
  */
@@ -11,8 +11,9 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./IdentityRegistry.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract PropertyPool is Ownable {
+contract PropertyPool is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
     IdentityRegistry public identityRegistry;
 
@@ -45,6 +46,9 @@ contract PropertyPool is Ownable {
         address _stablecoin,
         address _identityRegistry
     ) Ownable(msg.sender) {
+        require(_developer != address(0), "Invalid developer");
+        require(_fundingTarget > 0, "Invalid funding target");
+        require(_stablecoin.code.length > 0 && _identityRegistry.code.length > 0, "Invalid contract");
         developer = _developer;
         location = _location;
         fundingTarget = _fundingTarget;
@@ -53,18 +57,18 @@ contract PropertyPool is Ownable {
         identityRegistry = IdentityRegistry(_identityRegistry);
         state = PoolState.FUNDING;
     }
+
     // Investors contribute stablecoins toward the funding target
     // Must be FICA verified and pool must be in FUNDING state
-    function contribute(uint256 _amount) external {
+    function contribute(uint256 _amount) external nonReentrant {
         require(state == PoolState.FUNDING, "Pool is not in funding state");
         require(identityRegistry.isVerified(msg.sender), "Not FICA verified");
         require(_amount > 0, "Amount must be greater than 0");
-        require(
-            totalRaised + _amount <= fundingTarget,
-            "Exceeds funding target"
-        );
+        require(totalRaised + _amount <= fundingTarget, "Exceeds funding target");
 
+        uint256 balanceBefore = stablecoin.balanceOf(address(this));
         stablecoin.safeTransferFrom(msg.sender, address(this), _amount);
+        require(stablecoin.balanceOf(address(this)) - balanceBefore == _amount, "Unsupported transfer fee");
 
         contributions[msg.sender] += _amount;
         totalRaised += _amount;
@@ -73,7 +77,7 @@ contract PropertyPool is Ownable {
     }
 
     // Transitions pool from FUNDING to ACTIVE state
-    // Called by CommunityOracle once building completion is verified on the ground
+    // Owner-controlled transition; independent completion verification is not implemented.
     function activatePool() external onlyOwner {
         require(state == PoolState.FUNDING, "Pool is not in funding state");
         require(totalRaised >= fundingTarget, "Funding target not reached");
@@ -84,7 +88,7 @@ contract PropertyPool is Ownable {
     }
 
     // Transitions pool from ACTIVE to COMPLETE
-    // Called when tenants have accumulated full ownership through rent-to-equity
+    // Owner-controlled transition; this does not establish tenant property ownership.
     function completePool() external onlyOwner {
         require(state == PoolState.ACTIVE, "Pool is not in active state");
 
@@ -95,9 +99,7 @@ contract PropertyPool is Ownable {
 
     // Returns the contribution amount for a specific investor
     // Used by frontend and RentVault to calculate yield distribution
-    function getContribution(
-        address _investor
-    ) external view returns (uint256) {
+    function getContribution(address _investor) external view returns (uint256) {
         return contributions[_investor];
     }
 

@@ -1,46 +1,41 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-/**
- * @title RentVault
- * @notice Receives rent payments in stablecoins and automatically splits
- * every payment three ways — yield to investors, cut to protocol treasury,
- * and a portion to EquityVault where it accumulates toward tenant ownership.
- * This is the mechanic that turns tenants into owners.
- */
-
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "./PropertyPool.sol";
 import "./IdentityRegistry.sol";
 
-contract RentVault is Ownable {
+/// @notice Allocates rent between investor entitlements, treasury and reserved tenant equity.
+/// @dev Equity is an accounting reserve, not a property ownership token or a redeemable claim.
+/// Supports a standard, non-rebasing, exact-transfer ERC20 only.
+contract RentVault is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    PropertyPool public propertyPool;
-    IdentityRegistry public identityRegistry;
-    IERC20 public stablecoin;
+    PropertyPool public immutable propertyPool;
+    IdentityRegistry public immutable identityRegistry;
+    IERC20 public immutable stablecoin;
+    address public immutable treasury;
 
-    address public treasury;
-
-    // Split percentages in basis points — must add up to 10000
-    uint256 public investorSplit; // e.g. 7000 = 70%
-    uint256 public treasurySplit; // e.g. 1000 = 10%
-    uint256 public equitySplit; // e.g. 2000 = 20%
-
+    uint256 public investorSplit;
+    uint256 public treasurySplit;
+    uint256 public equitySplit;
     uint256 public totalRentReceived;
+    uint256 public totalInvestorAccrued;
+    uint256 public totalInvestorClaimed;
+    uint256 public totalTreasuryPaid;
+    uint256 public totalEquityReserved;
+    mapping(address => uint256) public claimedYield;
+    mapping(address => uint256) public tenantEquity;
 
-    event RentReceived(
-        address indexed tenant,
-        uint256 amount,
-        uint256 timestamp
+    event RentAllocated(
+        address indexed tenant, uint256 amount, uint256 investorAmount, uint256 treasuryAmount, uint256 equityAmount
     );
-    event YieldDistributed(
-        uint256 investorAmount,
-        uint256 treasuryAmount,
-        uint256 equityAmount
-    );
+    event YieldClaimed(address indexed investor, uint256 amount);
+    event SplitsUpdated(uint256 investorSplit, uint256 treasurySplit, uint256 equitySplit);
 
     constructor(
         address _propertyPool,
@@ -52,79 +47,73 @@ contract RentVault is Ownable {
         uint256 _equitySplit
     ) Ownable(msg.sender) {
         require(
-            _investorSplit + _treasurySplit + _equitySplit == 10000,
-            "Splits must add up to 10000"
+            _propertyPool.code.length > 0 && _identityRegistry.code.length > 0 && _stablecoin.code.length > 0,
+            "Invalid contract"
         );
-
+        require(_treasury != address(0) && _treasury != address(this), "Invalid treasury");
         propertyPool = PropertyPool(_propertyPool);
         identityRegistry = IdentityRegistry(_identityRegistry);
         stablecoin = IERC20(_stablecoin);
+        require(address(propertyPool.stablecoin()) == _stablecoin, "Pool token mismatch");
+        require(address(propertyPool.identityRegistry()) == _identityRegistry, "Pool identity mismatch");
         treasury = _treasury;
-        investorSplit = _investorSplit;
-        treasurySplit = _treasurySplit;
-        equitySplit = _equitySplit;
+        _setSplits(_investorSplit, _treasurySplit, _equitySplit);
     }
 
-    // Tenant pays rent in stablecoins
-    // Automatically splits payment between investors, treasury and equity vault
-    // Pool must be ACTIVE before rent can be received
-    function payRent(uint256 _amount) external {
-        require(
-            propertyPool.getPoolState() == PropertyPool.PoolState.ACTIVE,
-            "Pool is not active"
-        );
-        require(identityRegistry.isVerified(msg.sender), "Not FICA verified");
-        require(_amount > 0, "Amount must be greater than 0");
+    function payRent(uint256 amount) external nonReentrant {
+        require(propertyPool.getPoolState() == PropertyPool.PoolState.ACTIVE, "Pool is not active");
+        require(identityRegistry.isVerified(msg.sender), "Identity not verified");
+        require(amount > 0, "Amount must be greater than 0");
+        uint256 balanceBefore = stablecoin.balanceOf(address(this));
+        stablecoin.safeTransferFrom(msg.sender, address(this), amount);
+        require(stablecoin.balanceOf(address(this)) - balanceBefore == amount, "Unsupported transfer fee");
 
-        stablecoin.safeTransferFrom(msg.sender, address(this), _amount);
+        uint256 investorAmount = Math.mulDiv(amount, investorSplit, 10_000);
+        uint256 treasuryAmount = Math.mulDiv(amount, treasurySplit, 10_000);
+        // Assign the split-rounding remainder to tenant equity so every unit is allocated.
+        uint256 equityAmount = amount - investorAmount - treasuryAmount;
+        totalRentReceived += amount;
+        totalInvestorAccrued += investorAmount;
+        totalTreasuryPaid += treasuryAmount;
+        totalEquityReserved += equityAmount;
+        tenantEquity[msg.sender] += equityAmount;
 
-        uint256 investorAmount = (_amount * investorSplit) / 10000;
-        uint256 treasuryAmount = (_amount * treasurySplit) / 10000;
-        uint256 equityAmount = (_amount * equitySplit) / 10000;
-
-        // Send treasury cut immediately
-        stablecoin.safeTransfer(treasury, treasuryAmount);
-
-        totalRentReceived += _amount;
-
-        emit RentReceived(msg.sender, _amount, block.timestamp);
-        emit YieldDistributed(investorAmount, treasuryAmount, equityAmount);
+        if (treasuryAmount > 0) stablecoin.safeTransfer(treasury, treasuryAmount);
+        emit RentAllocated(msg.sender, amount, investorAmount, treasuryAmount, equityAmount);
     }
 
-    // Investors claim their proportional yield based on contribution to the pool
-    // Yield is calculated based on their share of total funding
-    function claimYield(address _investor) external {
-        require(
-            propertyPool.getPoolState() == PropertyPool.PoolState.ACTIVE,
-            "Pool is not active"
-        );
-        require(identityRegistry.isVerified(_investor), "Not FICA verified");
-
-        uint256 contribution = propertyPool.getContribution(_investor);
-        require(contribution > 0, "No contribution found");
-
-        uint256 fundingTarget = propertyPool.fundingTarget();
-        uint256 availableYield = (stablecoin.balanceOf(address(this)) *
-            contribution) / fundingTarget;
-        require(availableYield > 0, "No yield available");
-
-        stablecoin.safeTransfer(_investor, availableYield);
+    /// @notice Historical rent entitlement less previously claimed yield.
+    /// @dev Contribution weights cannot change after pool activation.
+    /// Direct token donations and the equity reserve do not enter the calculation.
+    function pendingYield(address investor) public view returns (uint256) {
+        uint256 entitlement =
+            Math.mulDiv(totalInvestorAccrued, propertyPool.getContribution(investor), propertyPool.fundingTarget());
+        return entitlement - claimedYield[investor];
     }
 
-    // Allows owner to update rent split percentages
-    // Splits must always add up to 10000 basis points
-    function updateSplits(
-        uint256 _investorSplit,
-        uint256 _treasurySplit,
-        uint256 _equitySplit
-    ) external onlyOwner {
-        require(
-            _investorSplit + _treasurySplit + _equitySplit == 10000,
-            "Splits must add up to 10000"
-        );
+    /// @notice Anyone can trigger a claim, but payment always goes to the investor.
+    /// Final accrued yield remains claimable after pool completion.
+    function claimYield(address investor) external nonReentrant {
+        require(propertyPool.getPoolState() != PropertyPool.PoolState.FUNDING, "Pool not activated");
+        require(identityRegistry.isVerified(investor), "Identity not verified");
+        uint256 amount = pendingYield(investor);
+        require(amount > 0, "No yield available");
+        claimedYield[investor] += amount;
+        totalInvestorClaimed += amount;
+        stablecoin.safeTransfer(investor, amount);
+        emit YieldClaimed(investor, amount);
+    }
 
-        investorSplit = _investorSplit;
-        treasurySplit = _treasurySplit;
-        equitySplit = _equitySplit;
+    function updateSplits(uint256 investors, uint256 protocol, uint256 equity) external onlyOwner {
+        _setSplits(investors, protocol, equity);
+    }
+
+    function _setSplits(uint256 investors, uint256 protocol, uint256 equity) internal {
+        require(investors <= 10_000 && protocol <= 10_000 && equity <= 10_000, "Invalid split");
+        require(investors + protocol + equity == 10_000, "Splits must add up to 10000");
+        investorSplit = investors;
+        treasurySplit = protocol;
+        equitySplit = equity;
+        emit SplitsUpdated(investors, protocol, equity);
     }
 }
