@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 /**
  * @title REITFactory
  * @notice Entry point for HomeInv Protocol. Micro-developers and sponsors
- * submit properties here. Factory deploys a dedicated PropertyPool per
+ * submit properties here. Factory records a link to an externally deployed PropertyPool per
  * development. All submissions are gated by FICA/KYC verification.
  */
 
@@ -30,17 +30,10 @@ contract REITFactory is Ownable {
 
     mapping(uint256 => PropertySubmission) public properties;
 
-    event PropertySubmitted(
-        uint256 indexed propertyId,
-        address indexed developer,
-        string location
-    );
+    event PropertySubmitted(uint256 indexed propertyId, address indexed developer, string location);
     event PoolDeployed(uint256 indexed propertyId, address indexed poolAddress);
 
-    constructor(
-        address _jurisdictionRegistry,
-        address _identityRegistry
-    ) Ownable(msg.sender) {
+    constructor(address _jurisdictionRegistry, address _identityRegistry) Ownable(msg.sender) {
         jurisdictionRegistry = JurisdictionRegistry(_jurisdictionRegistry);
         identityRegistry = IdentityRegistry(_identityRegistry);
     }
@@ -54,10 +47,7 @@ contract REITFactory is Ownable {
         bytes2 _jurisdiction
     ) external returns (uint256) {
         require(identityRegistry.isVerified(msg.sender), "Not FICA verified");
-        require(
-            jurisdictionRegistry.isJurisdictionActive(_jurisdiction),
-            "Jurisdiction not active"
-        );
+        require(jurisdictionRegistry.isJurisdictionActive(_jurisdiction), "Jurisdiction not active");
         require(_fundingTarget > 0, "Funding target must be greater than 0");
         require(bytes(_location).length > 0, "Location cannot be empty");
 
@@ -81,9 +71,7 @@ contract REITFactory is Ownable {
     }
 
     // Returns full property submission details by ID
-    function getProperty(
-        uint256 _propertyId
-    ) external view returns (PropertySubmission memory) {
+    function getProperty(uint256 _propertyId) external view returns (PropertySubmission memory) {
         require(_propertyId < propertyCount, "Property does not exist");
         return properties[_propertyId];
     }
@@ -99,15 +87,9 @@ contract REITFactory is Ownable {
 
     // Links deployed PropertyPool address back to the submission
     // Called by owner after pool deployment
-    function setPoolAddress(
-        uint256 _propertyId,
-        address _poolAddress
-    ) external onlyOwner {
+    function setPoolAddress(uint256 _propertyId, address _poolAddress) external onlyOwner {
         require(_propertyId < propertyCount, "Property does not exist");
-        require(
-            properties[_propertyId].poolAddress == address(0),
-            "Pool already deployed"
-        );
+        require(properties[_propertyId].poolAddress == address(0), "Pool already deployed");
         require(_poolAddress != address(0), "Invalid pool address");
 
         properties[_propertyId].poolAddress = _poolAddress;

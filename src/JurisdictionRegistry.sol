@@ -78,8 +78,7 @@ contract JurisdictionRegistry is Ownable {
         jurisdictions[_code].transferDutyThreshold = _transferDutyThreshold;
         jurisdictions[_code].ficaRequired = _ficaRequired;
         jurisdictions[_code].exchangeControlRequired = _exchangeControlRequired;
-        jurisdictions[_code]
-            .maxForeignOwnershipPercent = _maxForeignOwnershipPercent;
+        jurisdictions[_code].maxForeignOwnershipPercent = _maxForeignOwnershipPercent;
         jurisdictions[_code].regulatoryFramework = _regulatoryFramework;
 
         emit JurisdictionUpdated(_code);
@@ -92,6 +91,7 @@ contract JurisdictionRegistry is Ownable {
 
         emit JurisdictionDeactivated(_code);
     }
+
     function isJurisdictionActive(bytes2 _code) external view returns (bool) {
         return jurisdictions[_code].isActive;
     }
