@@ -9,6 +9,6 @@ Date: 29 September 2026. Base revision: f8960d748076d38f46783b6935cb0280bc945e48
 - JavaScript syntax check passed.
 - Existing Solidity sources were formatted to satisfy the repository's formatting gate. Behaviour changes are in RentVault and PropertyPool; other Solidity changes are formatting/comment corrections.
 - No contract deployment, remote commit, or push was performed.
-- Browser launch is unavailable in this environment. Desktop/mobile rendering and click-through acceptance need to be checked on the user's machine; no screenshots have been claimed as verified.
+- Browser launch is unavailable in the build environment. User-supplied desktop screenshots were inspected on 29 September 2026: the assembled house and initial rent ledger render correctly in the captured views. The ledger shows 420.00 and 280.00 available, 900.00 held, and 200.00 reserved. Screenshots do not verify motion, click-through behaviour, or mobile layout; those checks remain separate.
 
 The visual model intentionally has no wallet, RPC provider, external font, analytics, third-party script, or npm dependency. The tests do not establish legal compliance, property backing, a full security audit, or production suitability.

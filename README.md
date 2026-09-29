@@ -70,4 +70,18 @@ Validation on 29 September 2026: **18 contract tests passed**, including 256 fuz
 
 ## Screenshots
 
-The interface is ready for local capture. Follow [the screenshot guide](docs/SCREENSHOTS.md). Screenshots should show the labelled demonstration ledger and its real rendered state; none are fabricated or bundled as proof of a live system.
+Actual captures of the local demonstration interface. No wallet or blockchain transaction is involved.
+
+### House assembly
+
+The warm house illustration assembles in six stages, with pause and replay controls. Reduced-motion preferences show the completed house.
+
+![HomeInv overview with assembled isometric house](docs/screenshots/overview.png)
+
+### Rent ledger — starting scenario
+
+One 1,000.00-unit rent payment allocates 700.00 to investors, 100.00 to treasury, and 200.00 to tenant reserves. Before claims, A has 420.00 available, B has 280.00, and the vault holds 900.00.
+
+![HomeInv starting rent ledger with investor entitlements and tenant reserves](docs/screenshots/rent-ledger.png)
+
+See the [capture and acceptance guide](docs/SCREENSHOTS.md) for interaction checks.
